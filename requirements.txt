@@ -4,3 +4,9 @@ fastapi
 uvicorn[standard]
 pydantic
 requests
+# Agno knowledge and storage dependencies
+lancedb
+sentence-transformers
+tantivy 
+openai 
+sqlalchemy

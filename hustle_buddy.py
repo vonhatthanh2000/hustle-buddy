@@ -4,21 +4,50 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, validator
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
+from agno.embedder.openai import OpenAIEmbedder
+from agno.knowledge.pdf import PDFKnowledge
+from agno.vectordb.lancedb import LanceDb, SearchType
+from agno.storage.sqlite import SqliteStorage
 from dotenv import load_dotenv
 import uvicorn
 import json
+import os
+from pathlib import Path
 
 load_dotenv()
 
-app = FastAPI(title="Hustle Buddy API", description="AI Model Response Evaluation API")
+app = FastAPI(title="Hustle Buddy API", description="AI Model Response Evaluation API with Knowledge Base")
 
 model = OpenAIChat(id="gpt-4o-mini")
+
+# Setup knowledge base from docs folder
+docs_folder = Path("docs")
+pdf_files = list(docs_folder.glob("*.pdf"))
+
+knowledge = None
+storage = None
+
+if pdf_files:
+    print(f"📚 Loading knowledge base from {len(pdf_files)} PDF files...")
+    knowledge = PDFKnowledge(
+        path=docs_folder,
+        vector_db=LanceDb(
+            uri="tmp/lancedb",
+            table_name="hustle_buddy_docs",
+            search_type=SearchType.hybrid,
+            embedder=OpenAIEmbedder(id="text-embedding-3-small", dimensions=1536),
+        ),
+    )
+
+# Setup storage for agent sessions
+storage = SqliteStorage(table_name="agent_sessions", db_file="tmp/agent_sessions.db")
 
 class ModelComparisonRequest(BaseModel):
     prompt: str
     model_1: str
     model_2: str
     model_3: str
+    use_knowledge: bool = False
     
     @validator('prompt', 'model_1', 'model_2', 'model_3')
     def validate_non_empty(cls, v):
@@ -100,7 +129,9 @@ hustle_buddy = Agent(
         For each rubric, classify it as either:
         - Critical: If it directly affects the correctness, completeness, or alignment with the prompt.
         - Non-critical: If it's a helpful but non-essential quality.
-        """
+        """,
+        "If you have access to knowledge base, search it for relevant information before providing analysis.",
+        "Use knowledge from documentation to inform your evaluation criteria when available."
     ],
     expected_output=
     """
@@ -126,12 +157,11 @@ hustle_buddy = Agent(
 
     ...
     """,
-    # tools=[
-    #     add_task,
-    #     list_tasks,
-    #     complete_task,
-    #     productivity_tip
-    # ],
+    knowledge=knowledge,
+    storage=storage,
+    add_datetime_to_instructions=True,
+    add_history_to_messages=True,
+    num_history_runs=3,
     show_tool_calls=True,
     markdown=True
 )
@@ -142,14 +172,56 @@ async def root():
         "message": "Hustle Buddy API is running! Use POST /evaluate to analyze AI model responses.",
         "endpoints": {
             "evaluate": "POST /evaluate - Compare AI model responses",
+            "knowledge-status": "GET /knowledge-status - Check knowledge base status",
+            "load-knowledge": "POST /load-knowledge - Load/reload knowledge base",
             "docs": "GET /docs - Interactive API documentation",
             "health": "GET /health - Health check"
+        },
+        "features": {
+            "knowledge_base": knowledge is not None,
+            "storage": storage is not None,
+            "pdf_files_found": len(pdf_files) if pdf_files else 0
         }
     }
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Hustle Buddy API"}
+
+@app.get("/knowledge-status")
+async def knowledge_status():
+    """Check the status of the knowledge base."""
+    if not knowledge:
+        return {"status": "no_knowledge", "message": "No PDF files found in docs folder"}
+    
+    try:
+        # Check if knowledge is loaded
+        vector_db_exists = knowledge.vector_db.table_exists()
+        return {
+            "status": "ready" if vector_db_exists else "not_loaded",
+            "knowledge_available": knowledge is not None,
+            "vector_db_ready": vector_db_exists,
+            "pdf_files": [str(f.name) for f in pdf_files]
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/load-knowledge")
+async def load_knowledge(recreate: bool = False):
+    """Load or reload the knowledge base from PDF files."""
+    if not knowledge:
+        raise HTTPException(status_code=400, detail="No PDF files found in docs folder")
+    
+    try:
+        print(f"📚 Loading knowledge base (recreate={recreate})...")
+        knowledge.load(recreate=recreate)
+        return {
+            "status": "success",
+            "message": f"Knowledge base loaded from {len(pdf_files)} PDF files",
+            "pdf_files": [str(f.name) for f in pdf_files]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading knowledge base: {str(e)}")
 
 @app.post("/evaluate")
 async def evaluate_models(request: ModelComparisonRequest):
@@ -158,6 +230,7 @@ async def evaluate_models(request: ModelComparisonRequest):
     
     Args:
         request: JSON with prompt, model_1, model_2, model_3 responses
+        use_knowledge: Whether to use knowledge base for evaluation
         
     Returns:
         Analysis comparing Model 1 against Models 2 and 3
@@ -190,6 +263,9 @@ async def evaluate_models(request: ModelComparisonRequest):
         Please evaluate Model 1 against Models 2 and 3 according to your instructions.
         """
         
+        if request.use_knowledge and knowledge:
+            evaluation_prompt += "\n\nPlease search your knowledge base for relevant evaluation criteria and best practices before providing your analysis."
+        
         # Get the analysis from hustle_buddy
         response = hustle_buddy.run(evaluation_prompt)
         
@@ -200,7 +276,9 @@ async def evaluate_models(request: ModelComparisonRequest):
                 "prompt_length": len(request.prompt),
                 "model_1_length": len(request.model_1),
                 "model_2_length": len(request.model_2),
-                "model_3_length": len(request.model_3)
+                "model_3_length": len(request.model_3),
+                "knowledge_used": request.use_knowledge and knowledge is not None,
+                "session_id": response.session_id if hasattr(response, 'session_id') else None
             }
         }
         
@@ -210,4 +288,14 @@ async def evaluate_models(request: ModelComparisonRequest):
         raise HTTPException(status_code=500, detail=f"Error during evaluation: {str(e)}")
 
 if __name__ == "__main__":
+    # Load knowledge base on startup if available
+    if knowledge:
+        try:
+            print("🚀 Loading knowledge base on startup...")
+            knowledge.load(recreate=False)
+            print("✅ Knowledge base loaded successfully!")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not load knowledge base: {e}")
+            print("💡 You can load it manually using POST /load-knowledge")
+    
     uvicorn.run(app, host="0.0.0.0", port=8000)
