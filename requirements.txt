@@ -10,3 +10,6 @@ sentence-transformers
 tantivy 
 openai 
 sqlalchemy
+pgvector 
+pypdf 
+"psycopg[binary]"

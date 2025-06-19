@@ -8,6 +8,7 @@ from agno.embedder.openai import OpenAIEmbedder
 from agno.knowledge.pdf import PDFKnowledge
 from agno.vectordb.lancedb import LanceDb, SearchType
 from agno.storage.sqlite import SqliteStorage
+from knowledge_rag import knowledge_base
 from dotenv import load_dotenv
 import uvicorn
 import json
@@ -157,7 +158,7 @@ hustle_buddy = Agent(
 
     ...
     """,
-    knowledge=knowledge,
+    knowledge=knowledge_base,
     storage=storage,
     add_datetime_to_instructions=True,
     add_history_to_messages=True,
