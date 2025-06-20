@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import "./App.css";
 
 function App() {
@@ -121,9 +122,31 @@ function App() {
         {response && (
           <div className="response">
             <h3>Evaluation Results:</h3>
-            <pre className="json-response">
-              {JSON.stringify(response, null, 2)}
-            </pre>
+            <div className="analysis-content">
+              <h4>Analysis:</h4>
+              <div className="analysis-text">
+                <ReactMarkdown>{response.analysis}</ReactMarkdown>
+              </div>
+            </div>
+
+            {response.metadata && (
+              <div className="metadata-section">
+                <h4>Metadata:</h4>
+                <div className="metadata-grid">
+                  <div>Prompt Length: {response.metadata.prompt_length}</div>
+                  <div>Model 1 Length: {response.metadata.model1_length}</div>
+                  <div>Model 2 Length: {response.metadata.model2_length}</div>
+                  <div>Model 3 Length: {response.metadata.model3_length}</div>
+                  <div>
+                    Knowledge Used:{" "}
+                    {response.metadata.knowledge_used ? "Yes" : "No"}
+                  </div>
+                  {response.metadata.session_id && (
+                    <div>Session ID: {response.metadata.session_id}</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>
