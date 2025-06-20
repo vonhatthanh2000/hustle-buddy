@@ -6,6 +6,7 @@ This file contains the API endpoints for the Hustle Buddy service.
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from agent.agent import create_hustle_buddy_agent
 from dotenv import load_dotenv
@@ -19,6 +20,15 @@ load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(title="Hustle Buddy API", description="AI Model Response Evaluation API with Knowledge Base")
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Try to load knowledge base if available
 knowledge_base = None
@@ -34,12 +44,12 @@ hustle_buddy = create_hustle_buddy_agent(knowledge_base)
 
 class ModelComparisonRequest(BaseModel):
     prompt: str
-    model_1: str
-    model_2: str
-    model_3: str
+    model1: str
+    model2: str
+    model3: str
     use_knowledge: bool = False
     
-    @validator('prompt', 'model_1', 'model_2', 'model_3')
+    @validator('prompt', 'model1', 'model2', 'model3')
     def validate_non_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Field cannot be empty')
@@ -127,7 +137,7 @@ async def evaluate_models(request: ModelComparisonRequest):
         if len(request.prompt) > 10000:
             raise HTTPException(status_code=400, detail="Prompt too long (max 10,000 characters)")
         
-        for field_name, field_value in [("model_1", request.model_1), ("model_2", request.model_2), ("model_3", request.model_3)]:
+        for field_name, field_value in [("model1", request.model1), ("model2", request.model2), ("model3", request.model3)]:
             if len(field_value) > 50000:
                 raise HTTPException(status_code=400, detail=f"{field_name} response too long (max 50,000 characters)")
         
@@ -139,13 +149,13 @@ async def evaluate_models(request: ModelComparisonRequest):
         {request.prompt}
 
         **Model 1 Response:**
-        {request.model_1}
+        {request.model1}
 
         **Model 2 Response:**
-        {request.model_2}
+        {request.model2}
 
         **Model 3 Response:**
-        {request.model_3}
+        {request.model3}
 
         Please evaluate Model 1 against Models 2 and 3 according to your instructions.
         """
@@ -161,9 +171,9 @@ async def evaluate_models(request: ModelComparisonRequest):
             "analysis": response.content,
             "metadata": {
                 "prompt_length": len(request.prompt),
-                "model_1_length": len(request.model_1),
-                "model_2_length": len(request.model_2),
-                "model_3_length": len(request.model_3),
+                "model1_length": len(request.model1),
+                "model2_length": len(request.model2),
+                "model3_length": len(request.model3),
                 "knowledge_used": request.use_knowledge and knowledge_base is not None,
                 "session_id": response.session_id if hasattr(response, 'session_id') else None
             }

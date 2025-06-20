@@ -35,6 +35,7 @@ def create_hustle_buddy_agent(knowledge_base=None):
         instructions=AGENT_CONFIG["instructions"],
         expected_output=AGENT_CONFIG["expected_output"],
         knowledge=knowledge_base,
+        search_knowledge=True,
         **AGENT_CONFIG["agent_settings"]
     )
     
