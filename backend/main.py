@@ -24,7 +24,12 @@ app = FastAPI(title="Hustle Buddy API", description="AI Model Response Evaluatio
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",  # React dev server
+        "http://frontend:80",     # Docker frontend service
+        "http://localhost:80",    # Direct nginx access
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

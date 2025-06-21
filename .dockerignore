@@ -1,0 +1,10 @@
+.git
+.gitignore
+README.md
+.env
+.DS_Store
+.vscode
+.idea
+*.log
+docker-run.sh
+DOCKER_README.md 

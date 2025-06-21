@@ -28,7 +28,7 @@ function App() {
     setResponse(null);
 
     try {
-      const result = await fetch("http://localhost:8000/evaluate", {
+      const result = await fetch("/api/evaluate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
