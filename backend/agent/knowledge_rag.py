@@ -10,7 +10,10 @@ from agno.vectordb.pgvector import PgVector, SearchType
 from pathlib import Path
 
 # Configuration
-db_url = "postgresql+psycopg://postgres:postgres@localhost:5532/ai-assistant"
+import os
+
+# Use environment variable for database URL, fallback to localhost for development
+db_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5532/ai-assistant")
 docs_folder = Path("docs")
 
 # Initialize the knowledge base
